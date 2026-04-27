@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
-from analysis import load_data, generate_basic_insights
+from analysis import load_data, generate_basic_insights, create_fast_summary
 from ai_helper import ask_ai
 
 st.set_page_config(page_title="AI Data Assistant", layout="wide")
@@ -9,6 +9,10 @@ st.set_page_config(page_title="AI Data Assistant", layout="wide")
 st.title("📊 AI-Powered Intelligent Data Assistant")
 
 file = st.file_uploader("Upload CSV File", type=["csv"])
+
+def detect_chart_request(question):
+    keywords = ["chart", "plot", "graph", "compare"]
+    return any(word in question.lower() for word in keywords)
 
 if file:
     df = load_data(file)
@@ -18,99 +22,90 @@ if file:
 
     st.write(f"Rows: {df.shape[0]} | Columns: {df.shape[1]}")
 
-    # =========================
-    # AUTOMATIC STATISTICAL INSIGHTS
-    # =========================
-    st.subheader("🤖 Automatic Statistical Insights")
+    st.subheader("🤖 Automatic Insights")
+    st.write(generate_basic_insights(df))
 
-    basic_insights = generate_basic_insights(df)
-    st.write(basic_insights)
-
-    # =========================
-    # VISUAL SECTION
-    # =========================
     st.subheader("📊 Visual Analysis")
 
-    cat_columns = df.select_dtypes(include='object').columns
     numeric_columns = df.select_dtypes(include=['number']).columns
 
-    col1, col2 = st.columns(2)
-
-    with col1:
-        if len(cat_columns) > 0:
-            st.write("### Category Distribution")
-            selected_cat = st.selectbox("Select category column", cat_columns)
-
-            fig1, ax1 = plt.subplots(figsize=(5,3))
-            df[selected_cat].value_counts().head(5).plot(kind='bar', ax=ax1)
-            ax1.tick_params(axis='x', rotation=45)
-            st.pyplot(fig1, use_container_width=True)
-        else:
-            st.info("No text columns available.")
-
-    with col2:
-        if len(numeric_columns) > 0:
-            st.write("### Numeric Distribution")
-            selected_num = st.selectbox("Select numeric column", numeric_columns)
-
-            fig2, ax2 = plt.subplots(figsize=(5,3))
-            df[selected_num].plot(kind='hist', ax=ax2)
-            st.pyplot(fig2, use_container_width=True)
-        else:
-            st.info("No numeric columns available.")
+    if len(numeric_columns) > 0:
+        selected_col = st.selectbox("Select column", numeric_columns)
+        st.line_chart(df[selected_col])
 
     # =========================
-    # AI BUSINESS INSIGHTS
+    # AI INSIGHTS
     # =========================
-    st.subheader("🧠 AI Business Insight Generator")
+    st.subheader("🧠 AI Business Insights")
 
     if st.button("Generate AI Insights"):
-        with st.spinner("Analyzing deeper patterns..."):
-            summary = df.describe(include='all').to_string()
+        with st.spinner("Analyzing..."):
+
+            summary = create_fast_summary(df)
 
             prompt = f"""
-            You are a professional data analyst.
-
             Dataset summary:
             {summary}
 
-            Basic statistical insights:
-            {basic_insights}
-
-            Provide clear business insights, patterns, risks,
-            and recommendations based on this dataset.
+            Give business insights, risks and recommendations.
             """
 
-            ai_insights = ask_ai(prompt)
+            result = ask_ai(prompt)
 
-        st.write("### 🚀 AI Insights")
-        st.write(ai_insights)
+        if result["status"] == "success":
+            st.markdown("### 🧠 AI Insights")
+            st.markdown(result["data"])   # ✅ FIX (NO ORANGE TEXT)
+
+        elif result["status"] == "retry":
+            st.warning(result["message"])
+
+        else:
+            st.error(result["message"])
 
     # =========================
-    # USER QUESTION SECTION
+    # QUESTION SECTION
     # =========================
-    st.subheader("💬 Ask Custom Questions")
+    st.subheader("💬 Ask Questions")
 
-    user_question = st.text_input("Ask something about your dataset")
+    user_question = st.text_input("Ask something about your data")
 
     if user_question:
         with st.spinner("Thinking..."):
-            summary = df.describe(include='all').to_string()
 
-            prompt = f"""
-            Dataset summary:
-            {summary}
+            summary = create_fast_summary(df)
 
-            Question:
-            {user_question}
+            if detect_chart_request(user_question) and len(numeric_columns) >= 2:
 
-            Answer clearly and professionally.
-            """
+                col1, col2 = numeric_columns[:2]
 
-            answer = ask_ai(prompt)
+                st.subheader("📊 Comparison Chart")
+                st.line_chart(df[[col1, col2]])
 
-        st.write("### 🧠 AI Answer")
-        st.write(answer)
+                prompt = f"""
+                Compare {col1} and {col2}.
+                Summary: {summary}
+                """
+
+            else:
+                prompt = f"""
+                Dataset summary:
+                {summary}
+
+                Question:
+                {user_question}
+                """
+
+            result = ask_ai(prompt)
+
+        if result["status"] == "success":
+            st.markdown("### 🧠 Answer")
+            st.markdown(result["data"])   # ✅ FIX HERE ALSO
+
+        elif result["status"] == "retry":
+            st.warning(result["message"])
+
+        else:
+            st.error(result["message"])
 
 else:
-    st.info("Upload a CSV file to begin analysis.")
+    st.info("Upload a CSV file to start.")

@@ -1,14 +1,36 @@
 import os
 from dotenv import load_dotenv
-import google.generativeai as genai
+from groq import Groq
 
 load_dotenv()
 
-genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
+client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
 def ask_ai(prompt_text):
-    model = genai.GenerativeModel("models/gemini-2.5-flash")
+    try:
+        response = client.chat.completions.create(
+            model="llama-3.1-8b-instant",  # ✅ BEST CHOICE
+            messages=[
+                {"role": "user", "content": prompt_text}
+            ],
+            temperature=0.7
+        )
 
-    response = model.generate_content(prompt_text)
+        return {
+            "status": "success",
+            "data": response.choices[0].message.content
+        }
 
-    return response.text
+    except Exception as e:
+        error_msg = str(e)
+
+        if "429" in error_msg or "rate" in error_msg.lower():
+            return {
+                "status": "retry",
+                "message": "⚠️ Too many requests. Please wait a few seconds and try again."
+            }
+
+        return {
+            "status": "error",
+            "message": error_msg
+        }

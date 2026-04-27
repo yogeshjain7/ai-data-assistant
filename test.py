@@ -1,6 +1,14 @@
-import google.generativeai as genai
+from dotenv import load_dotenv
+import os
+from groq import Groq
 
-genai.configure(api_key="AIzaSyD_VLBGkfWVAfqzUkVt0Do_GSKX6Y7ePyM")
+load_dotenv()
 
-for m in genai.list_models():
-    print(m.name)
+client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+
+response = client.chat.completions.create(
+    model="llama-3.1-8b-instant",
+    messages=[{"role": "user", "content": "Say hello"}]
+)
+
+print(response.choices[0].message.content)
